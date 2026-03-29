@@ -1,0 +1,38 @@
+name: Rename SEP Folders to NOV
+on: workflow_dispatch
+
+jobs:
+  rename:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rename Folders
+        run: |
+          # Define the base path
+          BASE="ssc/chsl"
+
+          # Rename 12 Sep Shift 3
+          if [ -d "$BASE/CHSL-2025-12-SEP-SHIFT-3" ]; then
+            mv "$BASE/CHSL-2025-12-SEP-SHIFT-3" "$BASE/CHSL-2025-12-NOV-SHIFT-3"
+          fi
+
+          # Rename 13 Sep Shift 3
+          if [ -d "$BASE/CHSL-2025-13-SEP-SHIFT-3" ]; then
+            mv "$BASE/CHSL-2025-13-SEP-SHIFT-3" "$BASE/CHSL-2025-13-NOV-SHIFT-3"
+          fi
+
+          # Rename 14 Sep Shift 3
+          if [ -d "$BASE/CHSL-2025-14-SEP-SHIFT-3" ]; then
+            mv "$BASE/CHSL-2025-14-SEP-SHIFT-3" "$BASE/CHSL-2025-14-NOV-SHIFT-3"
+          fi
+
+      - name: Push Changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git diff-index --quiet HEAD || git commit -m "Renamed 12, 13, 14 SEP folders to NOV"
+          git push
