@@ -12,22 +12,13 @@ jobs:
       - name: Rename Folders
         run: |
           # Define the base path
-          BASE="ssc/chsl"
+          BASE="ssc/mts"
 
           # Rename 12 Sep Shift 3
-          if [ -d "$BASE/CHSL-2025-12-SEP-SHIFT-3" ]; then
-            mv "$BASE/CHSL-2025-12-SEP-SHIFT-3" "$BASE/CHSL-2025-12-NOV-SHIFT-3"
+          if [ -d "$BASE/" ]; then
+            mv "$BASE/MTS-2025-4-FEB-SHIFT-3" "$BASE/MTS-2025-04-FEB-SHIFT-3"
           fi
 
-          # Rename 13 Sep Shift 3
-          if [ -d "$BASE/CHSL-2025-13-SEP-SHIFT-3" ]; then
-            mv "$BASE/CHSL-2025-13-SEP-SHIFT-3" "$BASE/CHSL-2025-13-NOV-SHIFT-3"
-          fi
-
-          # Rename 14 Sep Shift 3
-          if [ -d "$BASE/CHSL-2025-14-SEP-SHIFT-3" ]; then
-            mv "$BASE/CHSL-2025-14-SEP-SHIFT-3" "$BASE/CHSL-2025-14-NOV-SHIFT-3"
-          fi
 
       - name: Push Changes
         run: |
