@@ -1,29 +1,40 @@
-name: Rename SEP Folders to NOV
+name: Rename Images image1 to image6
 on: workflow_dispatch
 
 jobs:
-  rename:
+  rename-images:
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
 
-      - name: Rename Folders
+      - name: Rename specific image files
         run: |
-          # Define the base path
-          BASE="ssc/mts"
-
-          # Rename 12 Sep Shift 3
-          if [ -d "$BASE/" ]; then
-            mv "$BASE/MTS-2025-4-FEB-SHIFT-3" "$BASE/MTS-2025-04-FEB-SHIFT-3"
+          TARGET_DIR="ssc-sub/2025/SSC-SUB-25-MATH-PERCENT"
+          
+          if [ -d "$TARGET_DIR" ]; then
+            cd "$TARGET_DIR"
+            
+            # This loop finds all files ending in 'image1.jpg' 
+            # and renames that specific part to 'image6.jpg'
+            for file in *image1.jpg; do
+              if [ -f "$file" ]; then
+                newname="${file%image1.jpg}image6.jpg"
+                echo "Renaming $file to $newname"
+                mv "$file" "$newname"
+              fi
+            done
+          else
+            echo "Directory $TARGET_DIR not found!"
+            exit 1
           fi
 
-
-      - name: Push Changes
+      - name: Commit and Push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .
-          git diff-index --quiet HEAD || git commit -m "Renamed 12, 13, 14 SEP folders to NOV"
+          git diff-index --quiet HEAD || git commit -m "Fixed image naming: image1 to image6"
           git push
+          
