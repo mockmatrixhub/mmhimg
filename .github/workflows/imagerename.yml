@@ -1,0 +1,55 @@
+name: Rename Question Images (Math Subtraction)
+on: 
+  workflow_dispatch:
+    inputs:
+      quiz_id:
+        description: 'Enter the Quiz ID folder name (e.g., CHSL-2025-12-SEP-SHIFT-3)'
+        required: true
+
+jobs:
+  rename-logic:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Math Rename Script
+        run: |
+          # Use the input Quiz ID
+          TARGET_DIR="ssc/chsl/${{ github.event.inputs.quiz_id }}"
+          
+          if [ -d "$TARGET_DIR" ]; then
+            cd "$TARGET_DIR"
+            echo "Working in $TARGET_DIR"
+            
+            # Loop through all .jpg files starting with 'q-'
+            for file in q-*.jpg; do
+              # Extract the number between 'q-' and '-image'
+              if [[ $file =~ q-([0-9]+)-image ]]; then
+                num="${BASH_REMATCH[1]}"
+                
+                # Check if the number is more than 25
+                if [ "$num" -gt 25 ]; then
+                  new_num=$((num - 25))
+                  # Create the new filename
+                  new_file="${file/q-$num-/q-$new_num-}"
+                  
+                  echo "Renaming $file to $new_file"
+                  mv "$file" "$new_file"
+                fi
+              fi
+            done
+          else
+            echo "Error: Directory $TARGET_DIR not found!"
+            exit 1
+          fi
+
+      - name: Commit and Push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git diff-index --quiet HEAD || git commit -m "Renamed images in ${{ github.event.inputs.quiz_id }} (Subtracted 25 from q > 25)"
+          git push
+          
