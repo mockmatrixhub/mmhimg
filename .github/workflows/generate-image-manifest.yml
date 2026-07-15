@@ -3,10 +3,10 @@ name: Generate Image Manifest
 on:
   push:
     paths:
-      - '**/*.jpg'
-      - '**/*.jpeg'
-      - '**/*.png'
-      - '**/*.webp'
+      - 'ssc/**/*.jpg'
+      - 'ssc/**/*.jpeg'
+      - 'ssc/**/*.png'
+      - 'ssc/**/*.webp'
   workflow_dispatch:
 
 jobs:
@@ -19,10 +19,9 @@ jobs:
 
       - name: Build manifest.json
         run: |
-          find . \
+          find ssc \
             -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) \
-            -not -path './.git/*' \
-            -printf '%P\n' \
+            -printf 'ssc/%P\n' \
             | sort \
             | jq -R -s -c 'split("\n") | map(select(length > 0))' > manifest.json
 
