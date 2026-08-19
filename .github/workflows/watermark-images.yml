@@ -33,6 +33,7 @@ jobs:
           const OPACITY = 0.15;
           const ROTATION = 0;
           const QUALITY = 100;
+          const BG_THRESHOLD = 45; // color-distance from detected background to treat as background
 
           function findJpgFiles(dir, files = []) {
             for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -48,21 +49,40 @@ jobs:
             return files;
           }
 
-          // Applies a uniform alpha value across every pixel of the logo,
-          // matching how canvas globalAlpha blends an opaque image.
-          async function applyOpacity(logoBuffer, opacity) {
+          // Detects the logo's background color from its corner pixels and makes
+          // those pixels fully transparent, then bakes in the target opacity
+          // for the remaining (actual artwork) pixels only.
+          async function makeCleanLogo(logoBuffer, opacity) {
             const { data, info } = await sharp(logoBuffer)
               .ensureAlpha()
               .raw()
               .toBuffer({ resolveWithObject: true });
             const { width, height, channels } = info;
-            for (let i = channels - 1; i < data.length; i += channels) {
-              data[i] = Math.round(255 * opacity);
+
+            const cornerIdx = [
+              0,
+              (width - 1) * channels,
+              (height - 1) * width * channels,
+              ((height - 1) * width + (width - 1)) * channels
+            ];
+            let br = 0, bg = 0, bb = 0;
+            for (const idx of cornerIdx) {
+              br += data[idx]; bg += data[idx + 1]; bb += data[idx + 2];
             }
+            br /= 4; bg /= 4; bb /= 4;
+
+            for (let i = 0; i < data.length; i += channels) {
+              const dr = data[i] - br;
+              const dg = data[i + 1] - bg;
+              const db = data[i + 2] - bb;
+              const dist = Math.sqrt(dr * dr + dg * dg + db * db);
+              data[i + channels - 1] = dist < BG_THRESHOLD ? 0 : Math.round(255 * opacity);
+            }
+
             return sharp(data, { raw: { width, height, channels } }).png().toBuffer();
           }
 
-          async function watermarkOne(logoWithOpacityBuffer, filePath) {
+          async function watermarkOne(cleanLogoBuffer, filePath) {
             const image = sharp(filePath);
             const meta = await image.metadata();
             const w = meta.width;
@@ -70,14 +90,14 @@ jobs:
             const shorterSide = Math.min(w, h);
             const targetSize = Math.round(shorterSide * 0.55);
 
-            const logoMeta = await sharp(logoWithOpacityBuffer).metadata();
+            const logoMeta = await sharp(cleanLogoBuffer).metadata();
             const ratio = logoMeta.width > logoMeta.height
               ? targetSize / logoMeta.width
               : targetSize / logoMeta.height;
             const dw = Math.round(logoMeta.width * ratio);
             const dh = Math.round(logoMeta.height * ratio);
 
-            const resizedLogo = await sharp(logoWithOpacityBuffer)
+            const resizedLogo = await sharp(cleanLogoBuffer)
               .resize(dw, dh)
               .rotate(ROTATION, { background: { r: 0, g: 0, b: 0, alpha: 0 } })
               .toBuffer();
@@ -101,12 +121,12 @@ jobs:
               process.exit(1);
             }
             const rawLogoBuffer = fs.readFileSync(LOGO_PATH);
-            const logoWithOpacityBuffer = await applyOpacity(rawLogoBuffer, OPACITY);
+            const cleanLogoBuffer = await makeCleanLogo(rawLogoBuffer, OPACITY);
             const files = findJpgFiles(ROOT);
             console.log(`Found ${files.length} .jpg file(s) to watermark (excluding logo.jpg).`);
             for (const file of files) {
               try {
-                await watermarkOne(logoWithOpacityBuffer, file);
+                await watermarkOne(cleanLogoBuffer, file);
               } catch (err) {
                 console.error(`Failed on ${file}:`, err.message);
               }
