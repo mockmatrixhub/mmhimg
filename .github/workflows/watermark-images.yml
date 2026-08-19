@@ -48,7 +48,21 @@ jobs:
             return files;
           }
 
-          async function watermarkOne(logoBuffer, filePath) {
+          // Applies a uniform alpha value across every pixel of the logo,
+          // matching how canvas globalAlpha blends an opaque image.
+          async function applyOpacity(logoBuffer, opacity) {
+            const { data, info } = await sharp(logoBuffer)
+              .ensureAlpha()
+              .raw()
+              .toBuffer({ resolveWithObject: true });
+            const { width, height, channels } = info;
+            for (let i = channels - 1; i < data.length; i += channels) {
+              data[i] = Math.round(255 * opacity);
+            }
+            return sharp(data, { raw: { width, height, channels } }).png().toBuffer();
+          }
+
+          async function watermarkOne(logoWithOpacityBuffer, filePath) {
             const image = sharp(filePath);
             const meta = await image.metadata();
             const w = meta.width;
@@ -56,17 +70,16 @@ jobs:
             const shorterSide = Math.min(w, h);
             const targetSize = Math.round(shorterSide * 0.55);
 
-            const logoMeta = await sharp(logoBuffer).metadata();
+            const logoMeta = await sharp(logoWithOpacityBuffer).metadata();
             const ratio = logoMeta.width > logoMeta.height
               ? targetSize / logoMeta.width
               : targetSize / logoMeta.height;
             const dw = Math.round(logoMeta.width * ratio);
             const dh = Math.round(logoMeta.height * ratio);
 
-            const resizedLogo = await sharp(logoBuffer)
+            const resizedLogo = await sharp(logoWithOpacityBuffer)
               .resize(dw, dh)
               .rotate(ROTATION, { background: { r: 0, g: 0, b: 0, alpha: 0 } })
-              .ensureAlpha(OPACITY)
               .toBuffer();
 
             const rotatedMeta = await sharp(resizedLogo).metadata();
@@ -87,12 +100,13 @@ jobs:
               console.error('logo.jpg not found at repo root.');
               process.exit(1);
             }
-            const logoBuffer = fs.readFileSync(LOGO_PATH);
+            const rawLogoBuffer = fs.readFileSync(LOGO_PATH);
+            const logoWithOpacityBuffer = await applyOpacity(rawLogoBuffer, OPACITY);
             const files = findJpgFiles(ROOT);
             console.log(`Found ${files.length} .jpg file(s) to watermark (excluding logo.jpg).`);
             for (const file of files) {
               try {
-                await watermarkOne(logoBuffer, file);
+                await watermarkOne(logoWithOpacityBuffer, file);
               } catch (err) {
                 console.error(`Failed on ${file}:`, err.message);
               }
@@ -107,6 +121,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A -- '*.jpg' '*.jpeg' ':!logo.jpg'
+          git add -A -- '*.jpg' ':!logo.jpg' || true
+          git add -A -- '*.jpeg' ':!logo.jpg' || true
           git diff --cached --quiet || git commit -m "Watermark all .jpg images with logo.jpg"
           git push
