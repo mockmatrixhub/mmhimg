@@ -1,0 +1,112 @@
+name: Watermark JPG Images
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  watermark:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install sharp
+        run: npm install sharp
+
+      - name: Watermark all .jpg files with logo.jpg
+        run: |
+          cat > watermark.js << 'EOF'
+          const fs = require('fs');
+          const path = require('path');
+          const sharp = require('sharp');
+
+          const ROOT = process.cwd();
+          const LOGO_PATH = path.join(ROOT, 'logo.jpg');
+          const OPACITY = 0.15;
+          const ROTATION = 0;
+          const QUALITY = 100;
+
+          function findJpgFiles(dir, files = []) {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+              if (entry.name === '.git' || entry.name === 'node_modules') continue;
+              const full = path.join(dir, entry.name);
+              if (entry.isDirectory()) {
+                findJpgFiles(full, files);
+              } else if (/\.jpe?g$/i.test(entry.name)) {
+                if (full === LOGO_PATH) continue;
+                files.push(full);
+              }
+            }
+            return files;
+          }
+
+          async function watermarkOne(logoBuffer, filePath) {
+            const image = sharp(filePath);
+            const meta = await image.metadata();
+            const w = meta.width;
+            const h = meta.height;
+            const shorterSide = Math.min(w, h);
+            const targetSize = Math.round(shorterSide * 0.55);
+
+            const logoMeta = await sharp(logoBuffer).metadata();
+            const ratio = logoMeta.width > logoMeta.height
+              ? targetSize / logoMeta.width
+              : targetSize / logoMeta.height;
+            const dw = Math.round(logoMeta.width * ratio);
+            const dh = Math.round(logoMeta.height * ratio);
+
+            const resizedLogo = await sharp(logoBuffer)
+              .resize(dw, dh)
+              .rotate(ROTATION, { background: { r: 0, g: 0, b: 0, alpha: 0 } })
+              .ensureAlpha(OPACITY)
+              .toBuffer();
+
+            const rotatedMeta = await sharp(resizedLogo).metadata();
+            const left = Math.round((w - rotatedMeta.width) / 2);
+            const top = Math.round((h - rotatedMeta.height) / 2);
+
+            const outBuffer = await image
+              .composite([{ input: resizedLogo, left, top }])
+              .jpeg({ quality: QUALITY })
+              .toBuffer();
+
+            fs.writeFileSync(filePath, outBuffer);
+            console.log(`Watermarked: ${path.relative(ROOT, filePath)}`);
+          }
+
+          async function main() {
+            if (!fs.existsSync(LOGO_PATH)) {
+              console.error('logo.jpg not found at repo root.');
+              process.exit(1);
+            }
+            const logoBuffer = fs.readFileSync(LOGO_PATH);
+            const files = findJpgFiles(ROOT);
+            console.log(`Found ${files.length} .jpg file(s) to watermark (excluding logo.jpg).`);
+            for (const file of files) {
+              try {
+                await watermarkOne(logoBuffer, file);
+              } catch (err) {
+                console.error(`Failed on ${file}:`, err.message);
+              }
+            }
+          }
+
+          main();
+          EOF
+          node watermark.js
+
+      - name: Commit watermarked images
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A -- '*.jpg' '*.jpeg' ':!logo.jpg'
+          git diff --cached --quiet || git commit -m "Watermark all .jpg images with logo.jpg"
+          git push
