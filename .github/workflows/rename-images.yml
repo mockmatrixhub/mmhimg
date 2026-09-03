@@ -1,0 +1,93 @@
+name: Rename Question Images (+/-30)
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_path:
+        description: "Path to folder containing q-{no}-imageN.jpg files"
+        required: true
+        type: string
+
+jobs:
+  rename:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Rename images (safe two-pass, no overwrite)
+        run: |
+          set -e
+          DIR="${{ github.event.inputs.image_path }}"
+
+          if [ ! -d "$DIR" ]; then
+            echo "Path not found: $DIR"
+            exit 1
+          fi
+
+          cd "$DIR"
+
+          shopt -s nullglob
+          files=(q-*-image*.jpg)
+
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No matching q-{no}-imageN.jpg files found in $DIR"
+            exit 0
+          fi
+
+          echo "Found ${#files[@]} matching file(s)."
+
+          # Pass 1: rename every file to a temporary name to avoid collisions
+          # (e.g. q-52 -> q-22 and q-22 -> q-52 would otherwise clash)
+          declare -a temp_names=()
+          for f in "${files[@]}"; do
+            # parse: q-<no>-image<n>.jpg
+            if [[ "$f" =~ ^q-([0-9]+)-image([0-9]+)\.jpg$ ]]; then
+              no="${BASH_REMATCH[1]}"
+              n="${BASH_REMATCH[2]}"
+
+              if [ "$no" -gt 30 ]; then
+                new_no=$((no - 30))
+              else
+                new_no=$((no + 30))
+              fi
+
+              tmp_name="TMP__${new_no}__${n}__$$_${RANDOM}.jpg"
+              mv -- "$f" "$tmp_name"
+              temp_names+=("$tmp_name")
+              echo "Staged: $f -> (final) q-${new_no}-image${n}.jpg"
+            else
+              echo "Skipping (pattern mismatch): $f"
+            fi
+          done
+
+          # Pass 2: delete any pre-existing file at the final name, then rename temp -> final
+          for tmp in "${temp_names[@]}"; do
+            # extract new_no and n back out of the temp name
+            base="${tmp#TMP__}"
+            new_no="${base%%__*}"
+            rest="${base#*__}"
+            n="${rest%%__*}"
+
+            final_name="q-${new_no}-image${n}.jpg"
+
+            if [ -f "$final_name" ]; then
+              echo "Removing existing file to avoid override: $final_name"
+              rm -f -- "$final_name"
+            fi
+
+            mv -- "$tmp" "$final_name"
+            echo "Renamed -> $final_name"
+          done
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Rename question images (+/-30 swap)"
+            git push
+          fi
