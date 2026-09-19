@@ -161,6 +161,10 @@ def main():
     # ---- report ----
     unique_questions = sum(len(v) for v in all_questions.values())
     top_users = sorted(per_user_counts.items(), key=lambda x: x[1], reverse=True)[:50]
+    quiz_question_counts = sorted(
+        ((qid, len(qs)) for qid, qs in all_questions.items()),
+        key=lambda x: x[1], reverse=True
+    )[:300]
 
     old_size = os.path.getsize(INPUT_PATH)
     new_sizes = {
@@ -198,6 +202,12 @@ def main():
     report_lines.append("|---|---|---|")
     for i, (uname, count) in enumerate(top_users, 1):
         report_lines.append(f"| {i} | {uname} | {count} |")
+
+    report_lines.append("\n## Top 300 quiz IDs by unique question count\n")
+    report_lines.append("| Rank | Quiz ID | Questions in bank |")
+    report_lines.append("|---|---|---|")
+    for i, (qid, count) in enumerate(quiz_question_counts, 1):
+        report_lines.append(f"| {i} | {qid} | {count} |")
 
     report_text = "\n".join(report_lines) + "\n"
     report_path = os.path.join(OUT_DIR, "conversion-report.md")
