@@ -1,0 +1,40 @@
+name: Migrate Saved Questions (fetch -> convert -> push)
+
+on:
+  workflow_dispatch:   # run manually from the Actions tab
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # only needed for the report release step below
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Fetch OLD saved_questions node from Firebase
+        run: |
+          curl -s "https://mmh-cgl-paid-full-mock-data-default-rtdb.firebaseio.com/saved_questions.json" \
+            -o old_saved_questions.json
+
+      - name: Convert to new structure (in memory / temp files only)
+        run: |
+          python3 convert_saved_questions.py old_saved_questions.json converted
+
+      - name: Push converted data into Firebase (merge, no overwrite)
+        env:
+          FIREBASE_DB_URL: https://mmh-cgl-paid-full-mock-data-default-rtdb.firebaseio.com
+          BATCH_SIZE: "500"
+          MAX_RETRIES: "5"
+        run: |
+          python3 push_to_firebase.py converted
+
+      - name: Publish the conversion report for reference
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="saved-questions-migrated-$(date +%Y%m%d-%H%M%S)"
+          gh release create "$TAG" \
+            converted/conversion-report.md \
+            --title "Saved Questions Migration - $(date +%Y-%m-%d)" \
+            --notes-file converted/conversion-report.md
