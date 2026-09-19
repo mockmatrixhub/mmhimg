@@ -1,0 +1,35 @@
+name: Convert Saved Questions to New Structure
+
+on:
+  workflow_dispatch:   # run manually from the Actions tab
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Fetch OLD saved_questions node from Firebase
+        run: |
+          curl -s "https://mmh-cgl-paid-full-mock-data-default-rtdb.firebaseio.com/saved_questions.json" \
+            -o old_saved_questions.json
+
+      - name: Run conversion script
+        run: |
+          python3 convert_saved_questions.py old_saved_questions.json converted
+
+      - name: Publish converted files + report as a release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="saved-questions-converted-$(date +%Y%m%d-%H%M%S)"
+          gh release create "$TAG" \
+            converted/converted-userSaved.json \
+            converted/converted-userSavedByQuiz.json \
+            converted/converted-allQuestions.json \
+            converted/conversion-report.md \
+            --title "Saved Questions Conversion - $(date +%Y-%m-%d)" \
+            --notes-file converted/conversion-report.md
